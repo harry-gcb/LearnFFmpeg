@@ -1,0 +1,7 @@
+IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    include(cmake.linux)
+ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Windows")
+    include(cmake.win)
+ELSE ()
+    include(cmake.mac)
+ENDIF (CMAKE_SYSTEM_NAME MATCHES "Linux")
