@@ -25,6 +25,10 @@
 #include "cmdutils.h"
 #include "opt_common.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
@@ -62,6 +66,10 @@
 
 #include "libpostproc/postprocess.h"
 #include "libpostproc/version.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 enum show_muxdemuxers {
     SHOW_DEFAULT,
@@ -625,8 +633,8 @@ static void print_codecs_for_id(enum AVCodecID id, int encoder)
 
 static int compare_codec_desc(const void *a, const void *b)
 {
-    const AVCodecDescriptor * const *da = a;
-    const AVCodecDescriptor * const *db = b;
+    const AVCodecDescriptor * const *da = (const AVCodecDescriptor * const *)a;
+    const AVCodecDescriptor * const *db = (const AVCodecDescriptor * const *)b;
 
     return (*da)->type != (*db)->type ? FFDIFFSIGN((*da)->type, (*db)->type) :
            strcmp((*da)->name, (*db)->name);
@@ -640,7 +648,7 @@ static unsigned get_codecs_sorted(const AVCodecDescriptor ***rcodecs)
 
     while ((desc = avcodec_descriptor_next(desc)))
         nb_codecs++;
-    if (!(codecs = av_calloc(nb_codecs, sizeof(*codecs)))) {
+    if (!(codecs = (const AVCodecDescriptor **)av_calloc(nb_codecs, sizeof(*codecs)))) {
         av_log(NULL, AV_LOG_ERROR, "Out of memory\n");
         exit_program(1);
     }
@@ -948,7 +956,7 @@ int show_colors(void *optctx, const char *opt, const char *arg)
 
     printf("%-32s #RRGGBB\n", "name");
 
-    for (i = 0; name = av_get_known_color_name(i, &rgb); i++)
+    for (i = 0; (name = av_get_known_color_name(i, &rgb)); i++)
         printf("%-32s #%02x%02x%02x\n", name, rgb[0], rgb[1], rgb[2]);
 
     return 0;
@@ -1002,21 +1010,21 @@ int show_layouts(void *optctx, const char *opt, const char *arg)
     printf("Individual channels:\n"
            "NAME           DESCRIPTION\n");
     for (i = 0; i < 63; i++) {
-        av_channel_name(buf, sizeof(buf), i);
+        av_channel_name(buf, sizeof(buf), (AVChannel)i);
         if (strstr(buf, "USR"))
             continue;
-        av_channel_description(buf2, sizeof(buf2), i);
+        av_channel_description(buf2, sizeof(buf2), (AVChannel)i);
         printf("%-14s %s\n", buf, buf2);
     }
     printf("\nStandard channel layouts:\n"
            "NAME           DECOMPOSITION\n");
-    while (ch_layout = av_channel_layout_standard(&iter)) {
+    while ((ch_layout = av_channel_layout_standard(&iter))) {
             av_channel_layout_describe(ch_layout, buf, sizeof(buf));
             printf("%-14s ", buf);
             for (i = 0; i < 63; i++) {
-                int idx = av_channel_layout_index_from_channel(ch_layout, i);
+                int idx = av_channel_layout_index_from_channel(ch_layout, (AVChannel)i);
                 if (idx >= 0) {
-                    av_channel_name(buf2, sizeof(buf2), i);
+                    av_channel_name(buf2, sizeof(buf2), (AVChannel)i);
                     printf("%s%s", idx ? "+" : "", buf2);
                 }
             }
@@ -1030,7 +1038,7 @@ int show_sample_fmts(void *optctx, const char *opt, const char *arg)
     int i;
     char fmt_str[128];
     for (i = -1; i < AV_SAMPLE_FMT_NB; i++)
-        printf("%s\n", av_get_sample_fmt_string(fmt_str, sizeof(fmt_str), i));
+        printf("%s\n", av_get_sample_fmt_string(fmt_str, sizeof(fmt_str), (AVSampleFormat)i));
     return 0;
 }
 
@@ -1065,13 +1073,13 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg)
         {"count", NULL, 0, AV_OPT_TYPE_INT, { .i64 = -1}, -1, INT_MAX},
         {NULL},
     };
-    static const AVClass class = {
+    static const AVClass avclass = {
         .class_name = "cpucount",
         .item_name  = av_default_item_name,
         .option     = opts,
         .version    = LIBAVUTIL_VERSION_INT,
     };
-    const AVClass *pclass = &class;
+    const AVClass *pclass = &avclass;
 
     ret = av_opt_eval_int(&pclass, opts, arg, &count);
 
@@ -1082,14 +1090,14 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg)
     return ret;
 }
 
-static void expand_filename_template(AVBPrint *bp, const char *template,
+static void expand_filename_template(AVBPrint *bp, const char *temp,
                                      struct tm *tm)
 {
     int c;
 
-    while ((c = *(template++))) {
+    while ((c = *(temp++))) {
         if (c == '%') {
-            if (!(c = *(template++)))
+            if (!(c = *(temp++)))
                 break;
             switch (c) {
             case 'p':
@@ -1173,7 +1181,7 @@ int init_report(const char *env, FILE **file)
 
     av_bprint_init(&filename, 0, AV_BPRINT_SIZE_AUTOMATIC);
     expand_filename_template(&filename,
-                             av_x_if_null(filename_template, "%p-%t.log"), tm);
+                             (const char *)av_x_if_null(filename_template, "%p-%t.log"), tm);
     av_free(filename_template);
     if (!av_bprint_is_complete(&filename)) {
         av_log(NULL, AV_LOG_ERROR, "Out of memory building report file name\n");

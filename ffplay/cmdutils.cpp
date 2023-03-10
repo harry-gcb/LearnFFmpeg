@@ -31,6 +31,11 @@
 
 #include "config.h"
 #include "va_copy.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 #include "libswscale/version.h"
@@ -47,6 +52,11 @@
 #include "libavutil/eval.h"
 #include "libavutil/dict.h"
 #include "libavutil/opt.h"
+
+#ifdef __cplusplus
+}
+#endif
+
 #include "cmdutils.h"
 #include "fopen_utf8.h"
 #include "opt_common.h"
@@ -162,16 +172,16 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
     printf("\n");
 }
 
-void show_help_children(const AVClass *class, int flags)
+void show_help_children(const AVClass *avclass, int flags)
 {
     void *iter = NULL;
     const AVClass *child;
-    if (class->option) {
-        av_opt_show2(&class, NULL, flags, 0);
+    if (avclass->option) {
+        av_opt_show2(&avclass, NULL, flags, 0);
         printf("\n");
     }
 
-    while (child = av_opt_child_class_iterate(class, &iter))
+    while ((child = av_opt_child_class_iterate(avclass, &iter)))
         show_help_children(child, flags);
 }
 
@@ -260,12 +270,12 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
     int *dstcount;
 
     if (po->flags & OPT_SPEC) {
-        SpecifierOpt **so = dst;
-        char *p = strchr(opt, ':');
+        SpecifierOpt **so = (SpecifierOpt **)dst;
+        char *p = (char *)strchr(opt, ':');
         char *str;
 
         dstcount = (int *)(so + 1);
-        *so = grow_array(*so, sizeof(**so), dstcount, *dstcount + 1);
+        *so = (SpecifierOpt *)grow_array(*so, sizeof(**so), dstcount, *dstcount + 1);
         str = av_strdup(p ? p + 1 : "");
         if (!str)
             return AVERROR(ENOMEM);
@@ -439,7 +449,7 @@ static void dump_argument(FILE *report_file, const char *a)
 {
     const unsigned char *p;
 
-    for (p = a; *p; p++)
+    for (p = (const unsigned char *)a; *p; p++)
         if (!((*p >= '+' && *p <= ':') || (*p >= '@' && *p <= 'Z') ||
               *p == '_' || (*p >= 'a' && *p <= 'z')))
             break;
@@ -448,7 +458,7 @@ static void dump_argument(FILE *report_file, const char *a)
         return;
     }
     fputc('"', report_file);
-    for (p = a; *p; p++) {
+    for (p = (const unsigned char *)a; *p; p++) {
         if (*p == '\\' || *p == '"' || *p == '$' || *p == '`')
             fprintf(report_file, "\\%c", *p);
         else if (*p < ' ' || *p > '~')
@@ -608,7 +618,8 @@ static void finish_group(OptionParseContext *octx, int group_idx,
     OptionGroupList *l = &octx->groups[group_idx];
     OptionGroup *g;
 
-    GROW_ARRAY(l->groups, l->nb_groups);
+    // GROW_ARRAY(l->groups, l->nb_groups);
+    l->groups = (OptionGroup *)grow_array(l->groups, sizeof(*l->groups), &l->nb_groups, l->nb_groups + 1);
     g = &l->groups[l->nb_groups - 1];
 
     *g             = octx->cur_group;
@@ -636,7 +647,8 @@ static void add_opt(OptionParseContext *octx, const OptionDef *opt,
     int global = !(opt->flags & (OPT_PERFILE | OPT_SPEC | OPT_OFFSET));
     OptionGroup *g = global ? &octx->global_opts : &octx->cur_group;
 
-    GROW_ARRAY(g->opts, g->nb_opts);
+    // GROW_ARRAY(g->opts, g->nb_opts);
+    g->opts = (Option *)grow_array(g->opts, sizeof(*g->opts), &g->nb_opts, g->nb_opts + 1);
     g->opts[g->nb_opts - 1].opt = opt;
     g->opts[g->nb_opts - 1].key = key;
     g->opts[g->nb_opts - 1].val = val;
@@ -651,7 +663,7 @@ static void init_parse_context(OptionParseContext *octx,
     memset(octx, 0, sizeof(*octx));
 
     octx->nb_groups = nb_groups;
-    octx->groups    = av_calloc(octx->nb_groups, sizeof(*octx->groups));
+    octx->groups    = (OptionGroupList *)av_calloc(octx->nb_groups, sizeof(*octx->groups));
     if (!octx->groups)
         exit_program(1);
 
@@ -921,9 +933,11 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
         prefix  = 's';
         flags  |= AV_OPT_FLAG_SUBTITLE_PARAM;
         break;
+    default:
+        break;
     }
 
-    while (t = av_dict_get(opts, "", t, AV_DICT_IGNORE_SUFFIX)) {
+    while ((t = av_dict_get(opts, "", t, AV_DICT_IGNORE_SUFFIX))) {
         const AVClass *priv_class;
         char *p = strchr(t->key, ':');
 
@@ -960,7 +974,7 @@ AVDictionary **setup_find_stream_info_opts(AVFormatContext *s,
 
     if (!s->nb_streams)
         return NULL;
-    opts = av_calloc(s->nb_streams, sizeof(*opts));
+    opts = (AVDictionary **)av_calloc(s->nb_streams, sizeof(*opts));
     if (!opts) {
         av_log(NULL, AV_LOG_ERROR,
                "Could not alloc memory for stream options.\n");
@@ -979,7 +993,7 @@ void *grow_array(void *array, int elem_size, int *size, int new_size)
         exit_program(1);
     }
     if (*size < new_size) {
-        uint8_t *tmp = av_realloc_array(array, new_size, elem_size);
+        uint8_t *tmp = (uint8_t *)av_realloc_array(array, new_size, elem_size);
         if (!tmp) {
             av_log(NULL, AV_LOG_ERROR, "Could not alloc buffer.\n");
             exit_program(1);
