@@ -39,6 +39,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/display.h"
+// #include "libavutil/getenv_utf8.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/imgutils.h"
 // #include "libavutil/libm.h"
@@ -73,6 +74,8 @@ void log_callback_help(void *ptr, int level, const char *fmt, va_list vl)
     vfprintf(stdout, fmt, vl);
 }
 
+// 设置动态库加载规则，这是一个安全函数，在 Windows 系统，默认会从当前目录加载 DLL，这容易被攻击。
+// 这个函数就是把当前目录的路径从加载规则里面去掉
 void init_dynload(void)
 {
 #if HAVE_SETDLLDIRECTORY && defined(_WIN32)
@@ -87,12 +90,6 @@ static void (*program_exit)(int ret);
 void register_exit(void (*cb)(int ret))
 {
     program_exit = cb;
-}
-
-void report_and_exit(int ret)
-{
-    av_log(NULL, AV_LOG_FATAL, "%s\n", av_err2str(ret));
-    exit_program(AVUNERROR(ret));
 }
 
 void exit_program(int ret)
@@ -308,6 +305,7 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
     return 0;
 }
 
+// 解析命令行参数
 int parse_option(void *optctx, const char *opt, const char *arg,
                  const OptionDef *options)
 {
@@ -655,7 +653,7 @@ static void init_parse_context(OptionParseContext *octx,
     octx->nb_groups = nb_groups;
     octx->groups    = av_calloc(octx->nb_groups, sizeof(*octx->groups));
     if (!octx->groups)
-        report_and_exit(AVERROR(ENOMEM));
+        exit_program(1);
 
     for (i = 0; i < octx->nb_groups; i++)
         octx->groups[i].group_def = &groups[i];
@@ -797,7 +795,12 @@ do {                                                                           \
 
 void print_error(const char *filename, int err)
 {
-    av_log(NULL, AV_LOG_ERROR, "%s: %s\n", filename, av_err2str(err));
+    char errbuf[128];
+    const char *errbuf_ptr = errbuf;
+
+    if (av_strerror(err, errbuf, sizeof(errbuf)) < 0)
+        errbuf_ptr = strerror(AVUNERROR(err));
+    av_log(NULL, AV_LOG_ERROR, "%s: %s\n", filename, errbuf_ptr);
 }
 
 int read_yesno(void)
@@ -878,7 +881,7 @@ FILE *get_preset_file(char *filename, size_t filename_size,
 #if HAVE_GETMODULEHANDLE && defined(_WIN32)
     av_free(datadir);
 #endif
-    // freeenv_utf8(env_ffmpeg_datadir);
+    // freeenv(env_ffmpeg_datadir);
     // freeenv_utf8(env_home);
     return f;
 }
@@ -920,7 +923,7 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
         break;
     }
 
-    while (t = av_dict_iterate(opts, t)) {
+    while (t = av_dict_get(opts, "", t, AV_DICT_IGNORE_SUFFIX)) {
         const AVClass *priv_class;
         char *p = strchr(t->key, ':');
 
@@ -958,8 +961,11 @@ AVDictionary **setup_find_stream_info_opts(AVFormatContext *s,
     if (!s->nb_streams)
         return NULL;
     opts = av_calloc(s->nb_streams, sizeof(*opts));
-    if (!opts)
-        report_and_exit(AVERROR(ENOMEM));
+    if (!opts) {
+        av_log(NULL, AV_LOG_ERROR,
+               "Could not alloc memory for stream options.\n");
+        exit_program(1);
+    }
     for (i = 0; i < s->nb_streams; i++)
         opts[i] = filter_codec_opts(codec_opts, s->streams[i]->codecpar->codec_id,
                                     s, s->streams[i], NULL);
@@ -974,8 +980,10 @@ void *grow_array(void *array, int elem_size, int *size, int new_size)
     }
     if (*size < new_size) {
         uint8_t *tmp = av_realloc_array(array, new_size, elem_size);
-        if (!tmp)
-            report_and_exit(AVERROR(ENOMEM));
+        if (!tmp) {
+            av_log(NULL, AV_LOG_ERROR, "Could not alloc buffer.\n");
+            exit_program(1);
+        }
         memset(tmp + *size*elem_size, 0, (new_size-*size) * elem_size);
         *size = new_size;
         return tmp;
@@ -988,8 +996,10 @@ void *allocate_array_elem(void *ptr, size_t elem_size, int *nb_elems)
     void *new_elem;
 
     if (!(new_elem = av_mallocz(elem_size)) ||
-        av_dynarray_add_nofree(ptr, nb_elems, new_elem) < 0)
-        report_and_exit(AVERROR(ENOMEM));
+        av_dynarray_add_nofree(ptr, nb_elems, new_elem) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Could not alloc buffer.\n");
+        exit_program(1);
+    }
     return new_elem;
 }
 

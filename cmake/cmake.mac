@@ -1,11 +1,11 @@
 set(CMAKE_BUILD_TYPE "Debug")
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/build)
 
-include_directories($ENV{LIB_3RDPARTY_PATH}/ffmpeg/include)
+# include_directories($ENV{LIB_3RDPARTY_PATH}/ffmpeg/include)
 
-link_directories($ENV{LIB_3RDPARTY_PATH}/x264/lib)
-link_directories($ENV{LIB_3RDPARTY_PATH}/x265/lib)
-link_directories($ENV{LIB_3RDPARTY_PATH}/ffmpeg/lib)
+# link_directories($ENV{LIB_3RDPARTY_PATH}/x264/lib)
+# link_directories($ENV{LIB_3RDPARTY_PATH}/x265/lib)
+# link_directories($ENV{LIB_3RDPARTY_PATH}/ffmpeg/lib)
 
 add_executable(bmp_parser ${PROJECT_SOURCE_DIR}/parser/bmp_parser.cpp)
 
@@ -106,3 +106,17 @@ target_link_libraries(avio_read avformat avdevice avfilter avcodec postproc avut
 add_executable(avio_write ${PROJECT_SOURCE_DIR}/advance/avio_write.cpp)
 target_link_libraries(avio_write avformat avdevice avfilter avcodec postproc avutil swresample swscale x265 x264 iconv bz2 z 
 "-framework VideoToolbox" "-framework AudioToolbox" "-framework CoreGraphics" "-framework OpenGL" "-framework CoreImage" "-framework AppKit" "-framework Foundation" "-framework CoreVideo" "-framework CoreMedia" "-framework CoreFoundation" "-framework Security")
+
+### 
+aux_source_directory(${CMAKE_SOURCE_DIR}/ffplay FFPLAY_SRC_LIST)
+
+# include_directories($ENV{LIB_3RDPARTY_PATH}/ffmpeg/include)
+# include_directories($ENV{LIB_3RDPARTY_PATH}/SDL/include/SDL2)
+
+# link_directories($ENV{LIB_3RDPARTY_PATH}/ffmpeg/lib)
+# link_directories($ENV{LIB_3RDPARTY_PATH}/SDL/lib)
+
+add_executable(ffplay ${FFPLAY_SRC_LIST})
+
+target_link_libraries(ffplay SDL2 avformat avdevice avfilter avcodec postproc avutil swresample swscale x265 x264 iconv bz2 z 
+"-framework VideoToolbox" "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreGraphics" "-framework OpenGL" "-framework AVFoundation" "-framework CoreImage" "-framework AppKit" "-framework Foundation" "-framework CoreVideo" "-framework CoreMedia" "-framework CoreFoundation" "-framework Security")

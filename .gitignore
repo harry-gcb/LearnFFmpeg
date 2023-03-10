@@ -1,3 +1,5 @@
 .vscode
 data
 build
+*.d
+*.o

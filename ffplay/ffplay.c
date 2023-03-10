@@ -56,8 +56,8 @@
 # include "libavfilter/buffersrc.h"
 #endif
 
-#include <SDL.h>
-#include <SDL_thread.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_thread.h>
 
 #include "cmdutils.h"
 #include "opt_common.h"
@@ -1860,7 +1860,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     }
     pix_fmts[nb_pix_fmts] = AV_PIX_FMT_NONE;
 
-    while ((e = av_dict_iterate(sws_dict, e))) {
+    while ((e = av_dict_get(sws_dict, "", e, AV_DICT_IGNORE_SUFFIX))) {
         if (!strcmp(e->key, "sws_flags")) {
             av_strlcatf(sws_flags_str, sizeof(sws_flags_str), "%s=%s:", "flags", e->value);
         } else
@@ -1915,14 +1915,8 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
 } while (0)
 
     if (autorotate) {
-        double theta = 0.0;
-        int32_t *displaymatrix = NULL;
-        AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX);
-        if (sd)
-            displaymatrix = (int32_t *)sd->data;
-        if (!displaymatrix)
-            displaymatrix = (int32_t *)av_stream_get_side_data(is->video_st, AV_PKT_DATA_DISPLAYMATRIX, NULL);
-        theta = get_rotation(displaymatrix);
+        int32_t *displaymatrix = (int32_t *)av_stream_get_side_data(is->video_st, AV_PKT_DATA_DISPLAYMATRIX, NULL);
+        double theta = get_rotation(displaymatrix);
 
         if (fabs(theta - 90) < 1.0) {
             INSERT_FILT("transpose", "clock");
@@ -1966,7 +1960,7 @@ static int configure_audio_filters(VideoState *is, const char *afilters, int for
 
     av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
 
-    while ((e = av_dict_iterate(swr_opts, e)))
+    while ((e = av_dict_get(swr_opts, "", e, AV_DICT_IGNORE_SUFFIX)))
         av_strlcatf(aresample_swr_opts, sizeof(aresample_swr_opts), "%s=%s:", e->key, e->value);
     if (strlen(aresample_swr_opts))
         aresample_swr_opts[strlen(aresample_swr_opts)-1] = '\0';
@@ -2023,6 +2017,8 @@ end:
 }
 #endif  /* CONFIG_AVFILTER */
 
+// 从 PacketQueue audioq 队列拿 AVPacket，然后丢给解码器解码，
+// 解码出来 AVFrame 之后，再把 AVFrame 丢到 FrameQueue 队列
 static int audio_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2119,6 +2115,8 @@ static int decoder_start(Decoder *d, int (*fn)(void *), const char *thread_name,
     return 0;
 }
 
+// 从 PacketQueue videoq 队列拿 AVPacket，然后丢给解码器解码，
+// 解码出来 AVFrame 之后，再把 AVFrame 丢到 FrameQueue 队列
 static int video_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2225,7 +2223,7 @@ static int video_thread(void *arg)
     av_frame_free(&frame);
     return 0;
 }
-
+// 字幕线程
 static int subtitle_thread(void *arg)
 {
     VideoState *is = arg;
@@ -2745,6 +2743,7 @@ static int is_realtime(AVFormatContext *s)
 }
 
 /* this thread gets the stream from the disk or the network */
+// 从 网络或者硬盘里面读取 AVPacket，读取到之后放进去 PacketQueue 队列
 static int read_thread(void *arg)
 {
     VideoState *is = arg;
@@ -3271,6 +3270,7 @@ static void seek_chapter(VideoState *is, int incr)
 }
 
 /* handle an event sent by the GUI */
+// 死循环，主要的任务就是不断 处理键盘按键事件 跟 播放视频帧
 static void event_loop(VideoState *cur_stream)
 {
     SDL_Event event;
@@ -3537,7 +3537,7 @@ static void opt_input_file(void *optctx, const char *filename)
         exit(1);
     }
     if (!strcmp(filename, "-"))
-        filename = "fd:";
+        filename = "pipe:";
     input_filename = filename;
 }
 
@@ -3692,6 +3692,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // Flag 标记不要显示SDL窗口，可以设置只播放声音，不显示画面
     if (display_disable) {
         video_disable = 1;
     }
@@ -3731,6 +3732,7 @@ int main(int argc, char **argv)
 #ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
         SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 #endif
+        // 创建SDL窗口
         window = SDL_CreateWindow(program_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, default_width, default_height, flags);
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
         if (window) {

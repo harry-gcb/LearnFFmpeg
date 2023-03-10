@@ -58,10 +58,10 @@
 #include "libswscale/version.h"
 
 #include "libswresample/swresample.h"
-// #include "libswresample/version.h"
+#include "libswresample/version.h"
 
-// #include "libpostproc/postprocess.h"
-// #include "libpostproc/version.h"
+#include "libpostproc/postprocess.h"
+#include "libpostproc/version.h"
 
 enum show_muxdemuxers {
     SHOW_DEFAULT,
@@ -191,7 +191,7 @@ static void print_all_libs_info(int flags, int level)
     PRINT_LIB_INFO(avfilter,   AVFILTER,   flags, level);
     PRINT_LIB_INFO(swscale,    SWSCALE,    flags, level);
     PRINT_LIB_INFO(swresample, SWRESAMPLE, flags, level);
-    // PRINT_LIB_INFO(postproc,   POSTPROC,   flags, level);
+    PRINT_LIB_INFO(postproc,   POSTPROC,   flags, level);
 }
 
 static void print_program_info(int flags, int level)
@@ -234,6 +234,7 @@ static void print_buildconf(int flags, int level)
     }
 }
 
+// 打印 ffplay 这个软件的 版权，版本之类的信息。可以删掉他，让控制台更简洁
 void show_banner(int argc, char **argv, const OptionDef *options)
 {
     int idx = locate_option(argc, argv, options, "version");
@@ -335,12 +336,9 @@ static void print_codec(const AVCodec *c)
         printf("    Supported hardware devices: ");
         for (int i = 0;; i++) {
             const AVCodecHWConfig *config = avcodec_get_hw_config(c, i);
-            const char *name;
             if (!config)
                 break;
-            name = av_hwdevice_get_type_name(config->device_type);
-            if (name)
-                printf("%s ", name);
+            printf("%s ", av_hwdevice_get_type_name(config->device_type));
         }
         printf("\n");
     }
@@ -642,8 +640,10 @@ static unsigned get_codecs_sorted(const AVCodecDescriptor ***rcodecs)
 
     while ((desc = avcodec_descriptor_next(desc)))
         nb_codecs++;
-    if (!(codecs = av_calloc(nb_codecs, sizeof(*codecs))))
-        report_and_exit(AVERROR(ENOMEM));
+    if (!(codecs = av_calloc(nb_codecs, sizeof(*codecs)))) {
+        av_log(NULL, AV_LOG_ERROR, "Out of memory\n");
+        exit_program(1);
+    }
     desc = NULL;
     while ((desc = avcodec_descriptor_next(desc)))
         codecs[i++] = desc;
